@@ -1411,7 +1411,7 @@ static int rtsp_state_machine_advance(rtsp_session_t *session) {
     return 0;
 
   case RTSP_STATE_SETUP:
-    snprintf(extra_headers, sizeof(extra_headers), "Session: %s\r\n",
+    snprintf(extra_headers, sizeof(extra_headers), "Session: %s\r\nRange: npt=120.000-\r\n",
              session->session_id);
     if (rtsp_prepare_request(session, RTSP_METHOD_PLAY, extra_headers) < 0) {
       logger(LOG_ERROR, "RTSP: Failed to prepare PLAY request");
