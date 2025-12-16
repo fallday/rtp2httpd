@@ -1339,6 +1339,7 @@ static int rtsp_try_receive_response(rtsp_session_t *session) {
  */
 static int rtsp_state_machine_advance(rtsp_session_t *session) {
   char extra_headers[RTSP_HEADERS_BUFFER_SIZE];
+  const char *query_start = strchr(session->server_url, '?');
 
   switch (session->state) {
   case RTSP_STATE_CONNECTED:
@@ -1411,8 +1412,14 @@ static int rtsp_state_machine_advance(rtsp_session_t *session) {
     return 0;
 
   case RTSP_STATE_SETUP:
-    snprintf(extra_headers, sizeof(extra_headers), "Session: %s\r\nRange: npt=120.000-\r\n",
-             session->session_id);
+     if (query_start) {
+       char start_value[64];
+       if (http_parse_query_param(query_start + 1, "r2h-start", start_value,
+                                   sizeof(start_value)) == 0) {
+       snprintf(extra_headers, sizeof(extra_headers), "Session: %s\r\nRange: npt=%s-\r\n",
+                 session->session_id, start_value);
+       }
+    }
     if (rtsp_prepare_request(session, RTSP_METHOD_PLAY, extra_headers) < 0) {
       logger(LOG_ERROR, "RTSP: Failed to prepare PLAY request");
       return -1;
