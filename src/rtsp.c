@@ -280,6 +280,7 @@ void rtsp_session_init(rtsp_session_t *session) {
   session->cseq = 1;
   session->server_port = 554; /* Default RTSP port */
   session->redirect_count = 0;
+  session->r2h_start[0] = '\0';
 
   /* Initialize transport parameters - mode will be negotiated during SETUP */
   session->transport_mode = RTSP_TRANSPORT_TCP;    /* Default preference */
@@ -1343,6 +1344,13 @@ static int rtsp_state_machine_advance(rtsp_session_t *session) {
 
   switch (session->state) {
   case RTSP_STATE_CONNECTED:
+    char start_value[RTSP_TIME_STRING_SIZE];
+    if (session->r2h_start[0] == '\0' && query_start) {
+       if (http_parse_query_param(query_start + 1, "r2h-start", start_value,
+                                   sizeof(start_value)) == 0) {
+          snprintf(session->r2h_start, sizeof(session->r2h_start), "%s", start_value);
+        }
+    }
     /* Ready to send OPTIONS (RFC 2326 requires OPTIONS before DESCRIBE) */
     extra_headers[0] = '\0'; /* No extra headers needed for OPTIONS */
     if (rtsp_prepare_request(session, RTSP_METHOD_OPTIONS, extra_headers) < 0) {
@@ -1412,16 +1420,12 @@ static int rtsp_state_machine_advance(rtsp_session_t *session) {
     return 0;
 
   case RTSP_STATE_SETUP:
-     if (query_start) {
-       char start_value[64];
-       if (http_parse_query_param(query_start + 1, "r2h-start", start_value,
-                                   sizeof(start_value)) == 0) {
+    if (session->r2h_start[0] != '\0') {
         snprintf(extra_headers, sizeof(extra_headers), "Session: %s\r\nRange: npt=%s-\r\n",
-                  session->session_id, start_value);
-       } else {
+                  session->session_id, session->r2h_start);
+    } else {
         snprintf(extra_headers, sizeof(extra_headers), "Session: %s\r\n",
                   session->session_id);
-       }
     }
     if (rtsp_prepare_request(session, RTSP_METHOD_PLAY, extra_headers) < 0) {
       logger(LOG_ERROR, "RTSP: Failed to prepare PLAY request");
