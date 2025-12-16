@@ -1416,8 +1416,11 @@ static int rtsp_state_machine_advance(rtsp_session_t *session) {
        char start_value[64];
        if (http_parse_query_param(query_start + 1, "r2h-start", start_value,
                                    sizeof(start_value)) == 0) {
-       snprintf(extra_headers, sizeof(extra_headers), "Session: %s\r\nRange: npt=%s-\r\n",
-                 session->session_id, start_value);
+        snprintf(extra_headers, sizeof(extra_headers), "Session: %s\r\nRange: npt=%s-\r\n",
+                  session->session_id, start_value);
+       } else {
+        snprintf(extra_headers, sizeof(extra_headers), "Session: %s\r\n",
+                  session->session_id);
        }
     }
     if (rtsp_prepare_request(session, RTSP_METHOD_PLAY, extra_headers) < 0) {
