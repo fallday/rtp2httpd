@@ -560,6 +560,62 @@ int rtsp_parse_server_url(rtsp_session_t *session, const char *rtsp_url,
 
   if (path_start) {
     *path_start = '/';
+
+    char *query_start = strstr(path_start, "?");
+    if (session->r2h_start[0] == '\0' && query_start) {
+      /* Extract r2h-seek-offset parameter if present */
+      char *r2h_start = strstr(query_start, "r2h-start=");
+
+      /* Check if at parameter boundary */
+      if (r2h_start &&
+          (r2h_start == query_start + 1 || *(r2h_start - 1) == '&')) {
+        /* Extract value */
+        char *value_start = r2h_start + 10; /* Skip "r2h-start=" */
+        char *value_end = strchr(value_start, '&');
+        if (!value_end) {
+          value_end = value_start + strlen(value_start);
+        }
+
+        size_t value_len = value_end - value_start;
+        char *start_str = malloc(value_len + 1);
+        if (start_str) {
+          strncpy(start_str, value_start, value_len);
+          start_str[value_len] = '\0';
+
+          /* URL decode */
+          if (http_url_decode(start_str) == 0) {
+            snprintf(session->r2h_start, sizeof(session->r2h_start), "%s", start_str);
+            logger(LOG_DEBUG, "Found r2h-start parameter: %s", session->r2h_start);
+          } else {
+            logger(LOG_ERROR, "Failed to decode r2h-start parameter");
+          }
+
+          free(start_str);
+        }
+
+        /* Remove r2h-seek-offset parameter from URL */
+        char *param_start =
+            (r2h_start > query_start + 1) ? (r2h_start - 1) : r2h_start;
+        if (r2h_start == query_start + 1) {
+          /* First parameter */
+          if (*value_end == '&') {
+            /* Has other params after, keep '?' and move them forward */
+            memmove(query_start + 1, value_end + 1, strlen(value_end + 1) + 1);
+          } else {
+            /* Only parameter, remove '?' */
+            *query_start = '\0';
+            query_start = NULL; /* Mark as no query string */
+          }
+        } else {
+          /* Not first parameter, remove including preceding '&' */
+          if (*value_end == '&') {
+            memmove(param_start, value_end, strlen(value_end) + 1);
+          } else {
+            *param_start = '\0';
+          }
+        }
+      }
+    }
   }
 
   /* Extract path and query string (playseek already removed by http.c) */
@@ -681,62 +737,6 @@ int rtsp_parse_server_url(rtsp_session_t *session, const char *rtsp_url,
     }
     logger(LOG_DEBUG, "RTSP: Updated server_url with %s: %s", seek_param_name,
            session->server_url);
-  }
-
-  char *query_start = strstr(session->server_url, "?");
-  if (session->r2h_start[0] == '\0' && query_start) {
-    /* Extract r2h-seek-offset parameter if present */
-    char *r2h_start = strstr(query_start, "r2h-start=");
-
-    /* Check if at parameter boundary */
-    if (r2h_start &&
-        (r2h_start == query_start + 1 || *(r2h_start - 1) == '&')) {
-      /* Extract value */
-      char *value_start = r2h_start + 10; /* Skip "r2h-start=" */
-      char *value_end = strchr(value_start, '&');
-      if (!value_end) {
-        value_end = value_start + strlen(value_start);
-      }
-
-      size_t value_len = value_end - value_start;
-      char *start_str = malloc(value_len + 1);
-      if (start_str) {
-        strncpy(start_str, value_start, value_len);
-        start_str[value_len] = '\0';
-
-        /* URL decode */
-        if (http_url_decode(start_str) == 0) {
-          snprintf(session->r2h_start, sizeof(session->r2h_start), "%s", start_str);
-          logger(LOG_DEBUG, "Found r2h-start parameter: %s", session->r2h_start);
-        } else {
-          logger(LOG_ERROR, "Failed to decode r2h-start parameter");
-        }
-
-        free(start_str);
-      }
-
-      /* Remove r2h-seek-offset parameter from URL */
-      char *param_start =
-          (r2h_start > query_start + 1) ? (r2h_start - 1) : r2h_start;
-      if (r2h_start == query_start + 1) {
-        /* First parameter */
-        if (*value_end == '&') {
-          /* Has other params after, keep '?' and move them forward */
-          memmove(query_start + 1, value_end + 1, strlen(value_end + 1) + 1);
-        } else {
-          /* Only parameter, remove '?' */
-          *query_start = '\0';
-          query_start = NULL; /* Mark as no query string */
-        }
-      } else {
-        /* Not first parameter, remove including preceding '&' */
-        if (*value_end == '&') {
-          memmove(param_start, value_end, strlen(value_end) + 1);
-        } else {
-          *param_start = '\0';
-        }
-      }
-    }
   }
 
   logger(LOG_DEBUG, "RTSP: Parsed URL - host=%s, port=%d, path=%s",
